@@ -1,0 +1,149 @@
+---
+title: "betareturn"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## packages
+
+```{r warning=FALSE,message=FALSE,fig.width=10}
+
+# -------------------------------------------------------------------------
+
+library(quantmod)
+library(tidyverse)
+library(stargazer)
+options(warn = -1)
+
+```
+
+## data
+
+```{r eval=FALSE}
+
+# -------------------------------------------------------------------------
+
+getSymbols("^IXIC")
+head(IXIC)
+IXIC$rm <- Delt(IXIC$IXIC.Adjusted, type = "log")
+IXIC_2 <- xts::last(IXIC, 60)
+
+getSymbols("DGS1MO", src = "FRED")
+head(DGS1MO)
+DGS1MO$rf <- DGS1MO/12/100
+DGS1MO_2 <- xts::last(DGS1MO, 60)
+
+rmrf <- merge.xts(IXIC_2, DGS1MO_2, join = "left")
+rmrf <- na.locf(rmrf)
+nrow(rmrf)
+
+companylist <- read.csv("companylist.csv", na.strings = "n/a")
+companylist <- companylist[!is.na(companylist$MarketCap),]
+
+sample_result <- list()
+for(i in 1:30) {
+
+  XJ_all <- data.frame()
+  j = 1
+  while(j <= 15) {
+    
+    company <- sample(companylist$Symbol, 1)
+    
+    tryerr1 <- try(
+      assign("XJ", 
+             getSymbols(company, src="yahoo", auto.assign = F)),
+      silent=TRUE
+    )
+    if ('try-error' %in% class(tryerr1)) next
+    
+    colnames(XJ) <- 
+      c("Open","High","Low","Close","Volume","Adjusted")
+    XJ$return <- Delt(XJ$Adjusted, type = "log")
+    XJ <- na.fill(XJ, 0)
+    XJ_2 <- xts::last(XJ, 60)
+    XJ_2$creturn <- cumsum(XJ_2$return)
+    XJ_2_M <- merge.xts(rmrf, XJ_2, join = "left")
+    XJ_2_M <- na.locf(XJ_2_M)
+    lmJ <- lm(I(return-rf) ~ I(rm-rf), data=XJ_2_M)
+    XJ_2_M$beta <- coef(lmJ)[2]
+    XJ_all <- as.data.frame(XJ_2_M) %>%
+      rownames_to_column() %>%
+      mutate(Sample = i,
+             Stk = company) %>%
+      rbind(XJ_all)
+    
+    print(paste(i, j, sep = "-"))
+    j = j+1
+  }
+  
+  sample_result[[i]] <- XJ_all
+}
+
+sample_result_2 <- bind_rows(sample_result)
+colnames(sample_result_2)
+
+```
+
+
+```{r echo = FALSE}
+
+load("20201203betareturn.RData")
+
+```
+
+## beta&return
+
+```{r warning=FALSE,message=FALSE,fig.width=10}
+# -------------------------------------------------------------------------
+
+sample_result_3 <- sample_result_2 %>%
+  group_by(Sample, Stk) %>%
+  summarise(beta = mean(beta), 
+            return = max(creturn)) %>%
+  group_by(Sample) %>%
+  summarise(beta = mean(beta),
+            return = mean(return))
+
+write.csv(sample_result_3, "beta&return.csv", row.names = F)
+
+plot(sample_result_3[,-1], pch = 16)
+cor(sample_result_3[,-1])
+lm_beta_return <- lm(return ~ beta, sample_result_3)
+summary(lm_beta_return)
+stargazer(lm_beta_return, type="text", out="lm_beta_return.htm")
+
+```
+
+## days&return
+
+```{r warning=FALSE,message=FALSE,fig.width=10}
+# -------------------------------------------------------------------------
+sample_result_3[which.max(sample_result_3$return), ]
+bestsample <- 
+  sample_result_3$Sample[which.max(sample_result_3$return)]
+
+sample_result_4 <- sample_result_2 %>%
+  filter(Sample == bestsample) %>%
+  group_by(rowname) %>%
+  summarise(return = mean(creturn)) %>%
+  mutate(Date = 1,
+         Days = cumsum(Date))
+
+write.csv(sample_result_4, "days&return.csv", row.names = F)
+
+ggplot(sample_result_4, aes(x = Days, y = return)) +
+  geom_point() +
+  geom_line() +
+  theme_bw()
+
+
+lm_Days_return <- lm(return ~ Days, sample_result_4)
+summary(lm_Days_return)
+stargazer(lm_Days_return, type="text", out="lm_Days_return.htm")
+
+
+```
+

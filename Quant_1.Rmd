@@ -1,0 +1,74 @@
+---
+title: "Quant_1"
+author: "Juzhen Lin" in collaboration with:
+Dalton Glove, Linhan Li & Shuaib Joomun
+date: "2020/11/20"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r get library quantmod}
+library(quantmod)
+getSymbols("^IXIC", src = "yahoo")
+getSymbols("^DJI", src = "yahoo")
+getSymbols("^GSPC", src = "yahoo")
+```
+
+```{r delta rate}
+### Obtain trading data of 3 indexes
+TD_NASDAQ <- tail(IXIC,120)
+TD_DJI <- tail(DJI,120)
+TD_SnP <- tail(GSPC,120)
+
+### Obtain delta of open and close for 3 indexes, and get the abs of them
+delta_NASDAQ <- tail(Delt(Op(IXIC), Cl(IXIC)), 120)
+delta_DJI <- tail(Delt(Op(DJI), Cl(DJI)), 120)
+delta_SnP <- tail(Delt(Op(GSPC), Cl(GSPC)), 120)
+abs_NASDAQ <- abs(delta_NASDAQ)
+abs_DJI <- abs(delta_DJI)
+abs_SnP <- abs(delta_SnP)
+
+### abs/open per day to obtain change rate
+open_NASDAQ <- tail(Op(IXIC), 120)
+open_DJI <- tail(Op(DJI), 120)
+open_SnP <- tail(Op(GSPC), 120)
+delta_rate_NASDAQ <- abs_NASDAQ/open_NASDAQ
+delta_rate_DJI <- abs_DJI/open_DJI
+delta_rate_SnP <- abs_SnP/open_SnP
+
+### Obtain volume of trading
+vol_NASDAQ <- tail(Vo(IXIC), 120)
+vol_DJI <- tail(Vo(DJI), 120)
+vol_SnP <- tail(Vo(GSPC), 120)
+```
+
+```{r Linear Regression}
+vol_NASDAQ=unname(as.matrix(vol_NASDAQ))
+delta_rate_NASDAQ=unname(as.matrix(delta_rate_NASDAQ))
+
+vol_DJI=unname(as.matrix(vol_DJI))
+delta_rate_DJI=unname(as.matrix(delta_rate_DJI))
+
+vol_SnP=unname(as.matrix(vol_SnP))
+delta_rate_SnP=unname(as.matrix(delta_rate_SnP))
+
+NASDAQ.lm <- lm(vol_NASDAQ ~ delta_rate_NASDAQ)
+summary(NASDAQ.lm)
+DJI.lm <- lm(vol_DJI ~ delta_rate_DJI)
+summary(DJI.lm)
+SnP.lm <- lm(vol_SnP ~ delta_rate_SnP)
+summary(SnP.lm)
+
+```
+```{r Data Vision}
+plot(x =delta_rate_NASDAQ,  y = vol_NASDAQ)
+abline(NASDAQ.lm)
+plot(x =delta_rate_DJI,  y = vol_DJI)
+abline(DJI.lm)
+plot(x =delta_rate_SnP,  y = vol_SnP)
+abline(SnP.lm)
+```
+
